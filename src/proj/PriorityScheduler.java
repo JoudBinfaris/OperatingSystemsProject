@@ -17,6 +17,10 @@ public class PriorityScheduler {
 
     public void run() {
 
+        System.out.println("\n==========================================");
+        System.out.println("   Priority Scheduler (Non-Preemptive)   ");
+        System.out.println("==========================================\n");
+
         int n = processes.size();
         List<PCB> waitingQueue = new ArrayList<>(processes);
 
