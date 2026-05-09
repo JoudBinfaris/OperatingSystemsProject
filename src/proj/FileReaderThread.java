@@ -6,67 +6,58 @@ import java.io.IOException;
 import java.util.Queue;
 
 public class FileReaderThread implements Runnable {
-	private String fileName;
-	private Queue<PCB> jobQueue;
+    private String fileName;
+    private Queue<PCB> jobQueue;
+    private MemoryManager memoryManager;
 
-	public FileReaderThread(String fileName, Queue<PCB> jobQueue) {
-		this.fileName = fileName;
-		this.jobQueue = jobQueue;
-	}
+    public FileReaderThread(String fileName, Queue<PCB> jobQueue, MemoryManager memoryManager) {
+        this.fileName = fileName;
+        this.jobQueue = jobQueue;
+        this.memoryManager = memoryManager;
+    }
 
-	@Override
-	public void run() {
-		System.out.println("Thread 1: reading file " + fileName);
+    @Override
+    public void run() {
+        System.out.println("Thread 1: reading file " + fileName);
 
-		try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
-			String line;
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
 
-			while ((line = br.readLine()) != null) {
-				line = line.trim();
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
 
-				//skip empty lines and start and end
-				if (line.isEmpty() || line.startsWith("[")) {
-					continue;
-				}
+                if (line.isEmpty() || line.startsWith("[")) {
+                    continue;
+                }
 
-				//process ID: burst time in ms: priority; Memory required in MB
-				//1:25:4;500
+                String[] parts = line.split(";");
+                if (parts.length != 2) continue;
 
-				// split by ; to separate the memory required
-				String[] parts = line.split(";");
-				if (parts.length != 2)
-					continue; // skip lines with mistakes
+                int memoryRequired = Integer.parseInt(parts[1].trim());
 
-				int memoryRequired = Integer.parseInt(parts[1].trim());
+                String[] processInfo = parts[0].split(":");
+                if (processInfo.length != 3) continue;
 
-				// split the first half by : to get ID burst and priority
-				String[] processInfo = parts[0].split(":");
-				if (processInfo.length != 3)
-					continue;
+                int processId = Integer.parseInt(processInfo[0].trim());
+                int burstTime = Integer.parseInt(processInfo[1].trim());
+                int priority = Integer.parseInt(processInfo[2].trim());
 
-				int processId = Integer.parseInt(processInfo[0].trim());
-				int burstTime = Integer.parseInt(processInfo[1].trim());
-				int priority = Integer.parseInt(processInfo[2].trim());
+                PCB newProcess = new PCB(processId, burstTime, priority, memoryRequired);
 
-				//create PCB object
-				PCB newProcess = new PCB(processId, burstTime, priority, memoryRequired);
+                synchronized (jobQueue) {
+                    jobQueue.add(newProcess);
+                    jobQueue.notifyAll();
+                }
 
-				//add to jobQueue
-				synchronized (jobQueue) {
-				    jobQueue.add(newProcess);
-				    
-				//wake up Thread 2 if it was sleeping 
-				    jobQueue.notifyAll(); 
-				}
+                System.out.println("Thread 1: Loaded " + newProcess.toString());
+            }
+        } catch (IOException e) {
+            System.err.println("Thread 1 Error: Could not read file -> " + e.getMessage());
+        } catch (NumberFormatException e) {
+            System.err.println("Thread 1 Error: Malformed number in file -> " + e.getMessage());
+        }
 
-				System.out.println("Thread 1: Loaded " + newProcess.toString());
-			}
-		} catch (IOException e) {
-			System.err.println("Thread 1 Error: Could not read file -> " + e.getMessage());
-		} catch (NumberFormatException e) {
-			System.err.println("Thread 1 Error: Malformed number in file -> " + e.getMessage());
-		}
-
-		System.out.println("Thread 1: finished loading processes into Job Queue.");
-	}
+        memoryManager.setFileReaderDone();
+        System.out.println("Thread 1: finished loading processes into Job Queue.");
+    }
 }

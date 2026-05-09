@@ -13,28 +13,22 @@ public class Main {
         Queue<PCB> jobQueue = new LinkedList<>();
         Queue<PCB> readyQueue = new LinkedList<>();
 
+        MemoryManager memoryManagerRunnable = new MemoryManager(jobQueue, readyQueue);
+
         Thread fileReader = new Thread(
-                new FileReaderThread("src/proj/job.txt", jobQueue)
+                new FileReaderThread("src/proj/job.txt", jobQueue, memoryManagerRunnable)
         );
+
+        Thread memoryManager = new Thread(memoryManagerRunnable);
 
         fileReader.start();
-
-        try {
-            fileReader.join();
-        } catch (InterruptedException e) {
-            System.out.println("File Reader Thread interrupted.");
-        }
-
-        Thread memoryManager = new Thread(
-                new MemoryManager(jobQueue, readyQueue)
-        );
-
         memoryManager.start();
 
         try {
+            fileReader.join();
             memoryManager.join();
         } catch (InterruptedException e) {
-            System.out.println("Memory Manager Thread interrupted.");
+            System.out.println("Thread interrupted.");
         }
 
         System.out.println("\nProcesses inside Ready Queue:");
@@ -58,16 +52,19 @@ public class Main {
             case 1:
                 SJFScheduler sjf = new SJFScheduler(processList);
                 sjf.run();
+                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
 
             case 2:
                 RoundRobinScheduler rr = new RoundRobinScheduler(processList);
                 rr.run();
+                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
 
             case 3:
                 PriorityScheduler ps = new PriorityScheduler(processList);
                 ps.run();
+                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
 
             default:

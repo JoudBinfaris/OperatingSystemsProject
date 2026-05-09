@@ -65,6 +65,8 @@ public class PriorityScheduler {
 
             p.setState(Pstate.RUNNING);
 
+            int burstBefore = p.getBurstTime();
+
             startTime[idx] = currentTime;
             terminationTime[idx] = currentTime + p.getBurstTime();
             waitingTime[idx] = currentTime - p.getArrivalTime();
@@ -74,8 +76,8 @@ public class PriorityScheduler {
             p.setTurnaroundTime(turnaroundTime[idx]);
             p.setState(Pstate.TERMINATED);
 
-            gantt.append(String.format("| P%-2d ", p.getProcessId()));
-            ganttTimes.append(String.format("%-6d", startTime[idx]));
+            gantt.append(String.format("| P%d(%d->%d) ", p.getProcessId(), burstBefore, 0));
+            ganttTimes.append(String.format("%-12d", startTime[idx]));
 
             int runDuration = p.getBurstTime();
             for (PCB waiting : waitingQueue) {
