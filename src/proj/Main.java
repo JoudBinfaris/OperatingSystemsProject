@@ -5,17 +5,39 @@ import java.util.Queue;
 
 public class Main {
 
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		
-		//shared job queue between thread 1 and thread 2
-        Queue<PCB> jobQueue = new LinkedList<>();
+    public static void main(String[] args) {
 
-        //start thread 1 (file reader)
-        Thread fileReader = new Thread(new FileReaderThread("src/proj/job.txt", jobQueue));
+        Queue<PCB> jobQueue = new LinkedList<>();
+        Queue<PCB> readyQueue = new LinkedList<>();
+
+        Thread fileReader = new Thread(
+                new FileReaderThread("src/proj/job.txt", jobQueue)
+        );
+
         fileReader.start();
 
+        try {
+            fileReader.join();
+        } catch (InterruptedException e) {
+            System.out.println("File Reader Thread interrupted.");
+        }
 
-	}
+        Thread memoryManager = new Thread(
+                new MemoryManager(jobQueue, readyQueue)
+        );
 
+        memoryManager.start();
+
+        try {
+            memoryManager.join();
+        } catch (InterruptedException e) {
+            System.out.println("Memory Manager Thread interrupted.");
+        }
+
+        System.out.println("\nProcesses inside Ready Queue:");
+
+        for (PCB p : readyQueue) {
+            System.out.println(p);
+        }
+    }
 }
