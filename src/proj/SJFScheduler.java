@@ -65,7 +65,7 @@ public class SJFScheduler {
 
             // Build Gantt bar
             gantt.append(String.format("| P%d(%d->%d) ", p.getProcessId(), burstBefore, 0));
-            ganttTimes.append(String.format("%-6d", start));
+            ganttTimes.append(String.format("%-12d", start));
 
             currentTime = term;
 

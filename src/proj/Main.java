@@ -1,8 +1,6 @@
 package proj;
 
-import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
 import java.util.Scanner;
 
@@ -25,6 +23,7 @@ public class Main {
 
         try {
             fileReader.join();
+            memoryManager.join();
         } catch (InterruptedException e) {
             System.out.println("Thread interrupted.");
         }
@@ -34,7 +33,6 @@ public class Main {
             System.out.println(p);
         }
 
-        List<PCB> processList = new ArrayList<>(readyQueue);
 
         Scanner scanner = new Scanner(System.in);
 
