@@ -29,9 +29,9 @@ public class SJFScheduler {
     // ── Main simulation ──────────────────────────────────────────────────────
     public void run() {
 
-        System.out.println("\n╔══════════════════════════════════════════╗");
-        System.out.println("║     Shortest Job First (SJF) Scheduler   ║");
-        System.out.println("╚══════════════════════════════════════════╝\n");
+        System.out.println("\n==========================================");
+System.out.println("     Shortest Job First (SJF) Scheduler  ");
+System.out.println("==========================================\n");
 
         // Step 1 – Sort by burst time; use original list index as tiebreaker
         // (stable sort preserves insertion order for equal elements)

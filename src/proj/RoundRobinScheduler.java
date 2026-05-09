@@ -36,9 +36,9 @@ public class RoundRobinScheduler {
     // ── Main simulation ──────────────────────────────────────────────────────
     public void run() {
 
-        System.out.println("\n╔══════════════════════════════════════════╗");
-        System.out.println("║   Round Robin Scheduler  (q = " + TIME_QUANTUM + " ms)      ║");
-        System.out.println("╚══════════════════════════════════════════╝\n");
+       System.out.println("\n==========================================");
+System.out.println("   Round Robin Scheduler  (q = 5 ms)     ");
+System.out.println("==========================================\n");
 
         // Step 1 – Initialize tracking arrays (indexed by position in 'processes')
         int n = processes.size();
