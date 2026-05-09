@@ -1,78 +1,122 @@
 package proj;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
+
 
 public class RoundRobinScheduler {
 
     private static final int TIME_QUANTUM = 5;
 
-    private List<PCB> processes;
-    private Queue<PCB> readyQueue;
+    private Queue<PCB>    liveReadyQueue; 
+    private MemoryManager memoryManager;  
+    private List<PCB>     processes;      
+    private Queue<PCB>    workingQueue;   
 
-    public RoundRobinScheduler(List<PCB> readyQueue) {
-        this.processes = new ArrayList<>(readyQueue);
-        this.readyQueue = new LinkedList<>(readyQueue);
+    
+    private Map<Integer, Integer> remainingBurstMap  = new LinkedHashMap<>();
+    private Map<Integer, Integer> startTimeMap       = new LinkedHashMap<>();
+    private Map<Integer, Integer> terminationTimeMap = new LinkedHashMap<>();
+    private Map<Integer, Integer> waitingTimeMap     = new LinkedHashMap<>();
+    private Map<Integer, Integer> turnaroundTimeMap  = new LinkedHashMap<>();
+    private Set<Integer>          hasStarted         = new HashSet<>();
+    private Set<Integer>          seen               = new HashSet<>();
+
+    // ── Constructors ─────────────────────────────────────────────────────────
+
+    public RoundRobinScheduler(Queue<PCB> readyQueue, MemoryManager memoryManager) {
+        this.liveReadyQueue = readyQueue;
+        this.memoryManager  = memoryManager;
+        this.processes      = new ArrayList<>(readyQueue);
+        this.workingQueue   = new LinkedList<>(readyQueue);
+        initRemainingBurst();
     }
 
+    /* Initialize remaining burst for all currently known processes */
+    private void initRemainingBurst() {
+        for (PCB p : processes) {
+            remainingBurstMap.put(p.getProcessId(), p.getBurstTime());
+            seen.add(p.getProcessId());
+        }
+    }
+
+    // ── Main simulation ──────────────────────────────────────────────────────
     public void run() {
 
         System.out.println("\n==========================================");
-        System.out.println("   Round Robin Scheduler  (q = 5 ms)     ");
+        System.out.println("   Round Robin Scheduler  (q = " + TIME_QUANTUM + " ms)   ");
         System.out.println("==========================================\n");
 
-        int n = processes.size();
-
-        int[] remainingBurst = new int[n];
-        int[] startTime = new int[n];
-        int[] terminationTime = new int[n];
-        int[] waitingTime = new int[n];
-        int[] turnaroundTime = new int[n];
-        boolean[] hasStarted = new boolean[n];
-
-        for (int i = 0; i < n; i++) {
-            remainingBurst[i] = processes.get(i).getBurstTime();
-        }
-
-        StringBuilder gantt = new StringBuilder();
+        StringBuilder gantt      = new StringBuilder();
         StringBuilder ganttTimes = new StringBuilder();
-
         int currentTime = 0;
 
-        while (!readyQueue.isEmpty()) {
-            PCB p = readyQueue.poll();
-            int idx = indexOf(p);
+        while (!workingQueue.isEmpty()) {
+
+            PCB p  = workingQueue.poll();
+            int id = p.getProcessId();
 
             p.setState(Pstate.RUNNING);
 
-            if (!hasStarted[idx]) {
-                startTime[idx] = currentTime;
-                hasStarted[idx] = true;
+            // Record start time only on first CPU visit
+            if (!hasStarted.contains(id)) {
+                startTimeMap.put(id, currentTime);
+                hasStarted.add(id);
             }
 
-            int burstBefore = remainingBurst[idx];
-            int runTime = Math.min(TIME_QUANTUM, remainingBurst[idx]);
-
+            // Run for either a full quantum or whatever burst remains
+              int remaining   = remainingBurstMap.get(id);
+            int burstBefore = remaining;
+            int runTime     = Math.min(TIME_QUANTUM, remaining);
+ 
+            ganttTimes.append(String.format("%-12d", currentTime));
+ 
             currentTime += runTime;
-            remainingBurst[idx] -= runTime;
-
-            int burstAfter = remainingBurst[idx];
-
+            remaining   -= runTime;
+            remainingBurstMap.put(id, remaining);
+ 
+            int burstAfter = remaining;
             gantt.append(String.format("| P%d(%d->%d) ", p.getProcessId(), burstBefore, burstAfter));
-            ganttTimes.append(String.format("%-12d", currentTime - runTime));
 
-            if (remainingBurst[idx] == 0) {
-                terminationTime[idx] = currentTime;
-                turnaroundTime[idx] = terminationTime[idx] - p.getArrivalTime();
-                waitingTime[idx] = turnaroundTime[idx] - p.getBurstTime();
-                p.setWaitingTime(waitingTime[idx]);
-                p.setTurnaroundTime(turnaroundTime[idx]);
+
+            if (remaining == 0) {
+
+                // Process fully finished
+                int term       = currentTime;
+                int turnaround = term - p.getArrivalTime();
+                int waiting    = turnaround - p.getBurstTime();
+
+                terminationTimeMap.put(id, term);
+                turnaroundTimeMap.put(id, turnaround);
+                waitingTimeMap.put(id, waiting);
+
+                p.setWaitingTime(waiting);
+                p.setTurnaroundTime(turnaround);
                 p.setState(Pstate.TERMINATED);
+
+                // ── Memory management ─────
+                if (memoryManager != null) {
+
+                    // Free this process's memory
+                    memoryManager.freeMemory(p);
+
+                    // Try to admit any previously rejected processes
+                    memoryManager.retryRejected();
+
+                    // Check if new processes were admitted to the live ready queue
+                    for (PCB newP : liveReadyQueue) {
+                        if (!seen.contains(newP.getProcessId())) {
+                            seen.add(newP.getProcessId());
+                            processes.add(newP);
+                            workingQueue.offer(newP); 
+                            remainingBurstMap.put(newP.getProcessId(), newP.getBurstTime());
+                        }
+                    }
+                }
+
             } else {
+                // Still has burst remaining — goes back to end of queue
                 p.setState(Pstate.READY);
-                readyQueue.offer(p);
+                workingQueue.offer(p);
             }
         }
 
@@ -80,18 +124,11 @@ public class RoundRobinScheduler {
         ganttTimes.append(currentTime);
 
         printGantt(gantt, ganttTimes);
-        printTable(n, startTime, terminationTime, waitingTime, turnaroundTime);
-        printAverages(n, waitingTime, turnaroundTime);
+        printTable();
+        printAverages();
     }
 
-    private int indexOf(PCB p) {
-        for (int i = 0; i < processes.size(); i++) {
-            if (processes.get(i).getProcessId() == p.getProcessId()) {
-                return i;
-            }
-        }
-        return -1;
-    }
+    // ── Output helpers ───────────────────────────────────────────────────────
 
     private void printGantt(StringBuilder gantt, StringBuilder ganttTimes) {
         System.out.println("Gantt Chart:");
@@ -100,11 +137,11 @@ public class RoundRobinScheduler {
         System.out.println();
     }
 
-    private void printTable(int n, int[] startTime, int[] terminationTime, int[] waitingTime, int[] turnaroundTime) {
-
-        String header = String.format("%-12s %-12s %-12s %-18s %-14s %-16s",
-                "Process ID", "Burst Time", "Start Time",
-                "Termination Time", "Waiting Time", "Turnaround Time");
+    private void printTable() {
+        String header = String.format(
+            "%-12s %-12s %-12s %-18s %-14s %-16s",
+            "Process ID", "Burst Time", "Start Time",
+            "Termination Time", "Waiting Time", "Turnaround Time");
 
         String divider = "";
         for (int i = 0; i < header.length(); i++) divider += "-";
@@ -114,42 +151,37 @@ public class RoundRobinScheduler {
         System.out.println(header);
         System.out.println(divider);
 
-        for (int i = 0; i < n; i++) {
-            PCB p = processes.get(i);
-            System.out.printf("%-12d %-12d %-12d %-18d %-14d %-16d%n",
-                    p.getProcessId(), p.getBurstTime(), startTime[i],
-                    terminationTime[i], waitingTime[i], turnaroundTime[i]);
+        for (PCB p : processes) {
+            int id = p.getProcessId();
+            System.out.printf(
+                "%-12d %-12d %-12d %-18d %-14d %-16d%n",
+                id,
+                p.getBurstTime(),
+                startTimeMap.get(id),
+                terminationTimeMap.get(id),
+                waitingTimeMap.get(id),
+                turnaroundTimeMap.get(id));
         }
 
         System.out.println(divider);
         System.out.println();
     }
 
-    private void printAverages(int n, int[] waitingTime, int[] turnaroundTime) {
-        double avgWaiting = 0;
+    private void printAverages() {
+        double avgWaiting    = 0;
         double avgTurnaround = 0;
 
-        for (int i = 0; i < n; i++) {
-            avgWaiting += waitingTime[i];
-            avgTurnaround += turnaroundTime[i];
+        for (PCB p : processes) {
+            avgWaiting    += waitingTimeMap.get(p.getProcessId());
+            avgTurnaround += turnaroundTimeMap.get(p.getProcessId());
         }
 
-        avgWaiting /= n;
-        avgTurnaround /= n;
+        avgWaiting    /= processes.size();
+        avgTurnaround /= processes.size();
 
         System.out.printf("Average Waiting Time    : %.2f ms%n", avgWaiting);
         System.out.printf("Average Turnaround Time : %.2f ms%n", avgTurnaround);
         System.out.println();
     }
 
-    public static void main(String[] args) {
-        List<PCB> readyQueue = new ArrayList<>();
-        readyQueue.add(new PCB(1, 25, 4, 500));
-        readyQueue.add(new PCB(2, 13, 3, 700));
-        readyQueue.add(new PCB(3, 20, 3, 100));
-        readyQueue.add(new PCB(4, 18, 2, 200));
-
-        RoundRobinScheduler rr = new RoundRobinScheduler(readyQueue);
-        rr.run();
-    }
 }

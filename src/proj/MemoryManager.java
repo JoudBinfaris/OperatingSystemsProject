@@ -1,5 +1,6 @@
 package proj;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 
@@ -9,6 +10,7 @@ public class MemoryManager implements Runnable {
 
     private Queue<PCB> jobQueue;
     private Queue<PCB> readyQueue;
+    private List<PCB> rejectedQueue = new ArrayList<>();
     private int usedMemory = 0;
     private boolean fileReaderDone = false;
 
@@ -50,7 +52,8 @@ public class MemoryManager implements Runnable {
                 process = jobQueue.poll();
             }
 
-            if (process == null) continue;
+            if (process == null)
+                continue;
 
             if (usedMemory + process.getMemoryRequired() <= MAX_MEMORY) {
 
@@ -68,15 +71,16 @@ public class MemoryManager implements Runnable {
                 System.out.println("Rejected: P" + process.getProcessId()
                         + " | Needs: " + process.getMemoryRequired()
                         + " MB | Available: " + (MAX_MEMORY - usedMemory) + " MB");
+                rejectedQueue.add(process);
             }
         }
 
-        System.out.println("\nThread 2 finished.");
     }
 
     public void freeMemory(PCB process) {
         usedMemory -= process.getMemoryRequired();
-        if (usedMemory < 0) usedMemory = 0;
+        if (usedMemory < 0)
+            usedMemory = 0;
         process.setState(Pstate.TERMINATED);
         System.out.println("Freed: P" + process.getProcessId()
                 + " | Memory Used: " + usedMemory + "/" + MAX_MEMORY + " MB");
@@ -86,6 +90,24 @@ public class MemoryManager implements Runnable {
         System.out.println("\nFreeing memory after scheduling:");
         for (PCB p : processes) {
             freeMemory(p);
+        }
+    }
+
+    public void retryRejected() {
+        List<PCB> retry = new ArrayList<>(rejectedQueue);
+        rejectedQueue.clear();
+        for (PCB process : retry) {
+            if (usedMemory + process.getMemoryRequired() <= MAX_MEMORY) {
+                usedMemory += process.getMemoryRequired();
+                process.setState(Pstate.READY);
+                synchronized (readyQueue) {
+                    readyQueue.add(process);
+                }
+                System.out.println("Admitted: P" + process.getProcessId()
+                        + " | Memory Used: " + usedMemory + "/" + MAX_MEMORY + " MB");
+            } else {
+                rejectedQueue.add(process); // still can't fit, keep waiting
+            }
         }
     }
 }

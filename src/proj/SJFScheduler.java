@@ -1,28 +1,23 @@
 package proj;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
-/**
- * SJFScheduler - Shortest Job First (Non-Preemptive) Scheduling Algorithm
- *
- * Rules:
- * - Processes are sorted by CPU burst time (shortest first).
- * - Ties in burst time are broken by arrival order (order in the input list).
- * - All processes are assumed to arrive at time 0.
- *
- * Usage:
- * SJFScheduler scheduler = new SJFScheduler(readyQueue);
- * scheduler.run();
- */
 public class SJFScheduler {
 
-    private List<PCB> processes; // local copy of the ready queue
+    private Queue<PCB> liveReadyQueue;
+    private MemoryManager memoryManager;
+    private List<PCB> processes;
 
-    // ── Constructor ──────────────────────────────────────────────────────────
-    public SJFScheduler(List<PCB> readyQueue) {
-        // Work on a copy so we don't disturb the original queue
+    private Map<Integer, Integer> startTimeMap = new LinkedHashMap<>();
+    private Map<Integer, Integer> terminationTimeMap = new LinkedHashMap<>();
+    private Map<Integer, Integer> waitingTimeMap = new LinkedHashMap<>();
+    private Map<Integer, Integer> turnaroundTimeMap = new LinkedHashMap<>();
+
+    // ── Constructor ─────────────────────────────────────────────────────────
+
+    public SJFScheduler(Queue<PCB> readyQueue, MemoryManager memoryManager) {
+        this.liveReadyQueue = readyQueue;
+        this.memoryManager = memoryManager;
         this.processes = new ArrayList<>(readyQueue);
     }
 
@@ -30,60 +25,79 @@ public class SJFScheduler {
     public void run() {
 
         System.out.println("\n==========================================");
-System.out.println("     Shortest Job First (SJF) Scheduler  ");
-System.out.println("==========================================\n");
+        System.out.println("     Shortest Job First (SJF) Scheduler  ");
+        System.out.println("==========================================\n");
 
-        // Step 1 – Sort by burst time; use original list index as tiebreaker
-        // (stable sort preserves insertion order for equal elements)
-        processes.sort(Comparator.comparingInt(PCB::getBurstTime));
+        // Track added ID's
+        Set<Integer> seen = new HashSet<>();
+        for (PCB p : processes)
+            seen.add(p.getProcessId());
 
-        // Step 2 – Simulate execution and collect results
-        int currentTime = 0;
-        int n = processes.size();
+        // sort working list
+        List<PCB> workingList = new ArrayList<>(processes);
+        workingList.sort(Comparator.comparingInt(PCB::getBurstTime));
 
-        int[] startTime = new int[n];
-        int[] terminationTime = new int[n];
-        int[] waitingTime = new int[n];
-        int[] turnaroundTime = new int[n];
-
-        // Gantt chart: each entry is "| P<id> (start-end) "
         StringBuilder gantt = new StringBuilder();
         StringBuilder ganttTimes = new StringBuilder();
+        int currentTime = 0;
 
-        for (int i = 0; i < n; i++) {
-            PCB p = processes.get(i);
+        while (!workingList.isEmpty()) {
 
+            PCB p = workingList.remove(0);
             p.setState(Pstate.RUNNING);
 
-            startTime[i] = currentTime;
-            terminationTime[i] = currentTime + p.getBurstTime();
-            waitingTime[i] = currentTime - p.getArrivalTime(); // arrival = 0
-            turnaroundTime[i] = terminationTime[i] - p.getArrivalTime();
+            // Calculate metrics
+            int burstBefore = p.getBurstTime();
+            int start = currentTime;
+            int term = currentTime + p.getBurstTime();
+            int waiting = currentTime - p.getArrivalTime();
+            int turnaround = term - p.getArrivalTime();
 
-            // Store back into PCB
-            p.setWaitingTime(waitingTime[i]);
-            p.setTurnaroundTime(turnaroundTime[i]);
+            // Store in maps
+            startTimeMap.put(p.getProcessId(), start);
+            terminationTimeMap.put(p.getProcessId(), term);
+            waitingTimeMap.put(p.getProcessId(), waiting);
+            turnaroundTimeMap.put(p.getProcessId(), turnaround);
+
+            p.setWaitingTime(waiting);
+            p.setTurnaroundTime(turnaround);
             p.setState(Pstate.TERMINATED);
 
             // Build Gantt bar
-            gantt.append(String.format("| P%-2d ", p.getProcessId()));
-            ganttTimes.append(String.format("%-6d", startTime[i]));
+            gantt.append(String.format("| P%d(%d->%d) ", p.getProcessId(), burstBefore, 0));
+            ganttTimes.append(String.format("%-6d", start));
 
-            currentTime = terminationTime[i];
+            currentTime = term;
+
+            // ── Memory management ─────────
+            if (memoryManager != null) {
+
+                // Free this process's memory
+                memoryManager.freeMemory(p);
+
+                // Try to admit any previously rejected processes
+                memoryManager.retryRejected();
+
+                // Check if any new processes were admitted to the live ready queue
+                for (PCB newP : liveReadyQueue) {
+                    if (!seen.contains(newP.getProcessId())) {
+                        seen.add(newP.getProcessId());
+                        processes.add(newP);
+                        workingList.add(newP);
+                    }
+                }
+
+                // Re-sort working list
+                workingList.sort(Comparator.comparingInt(PCB::getBurstTime));
+            }
         }
 
-        // Close Gantt bar and append final time
         gantt.append("|");
         ganttTimes.append(currentTime);
 
-        // Step 3 – Print Gantt chart
         printGantt(gantt, ganttTimes);
-
-        // Step 4 – Print results table
-        printTable(n, startTime, terminationTime, waitingTime, turnaroundTime);
-
-        // Step 5 – Print averages
-        printAverages(n, waitingTime, turnaroundTime);
+        printTable();
+        printAverages();
     }
 
     // ── Output helpers ───────────────────────────────────────────────────────
@@ -95,12 +109,7 @@ System.out.println("==========================================\n");
         System.out.println();
     }
 
-    private void printTable(int n,
-            int[] startTime,
-            int[] terminationTime,
-            int[] waitingTime,
-            int[] turnaroundTime) {
-
+    private void printTable() {
         String header = String.format(
                 "%-12s %-12s %-12s %-18s %-14s %-16s",
                 "Process ID", "Burst Time", "Start Time",
@@ -115,56 +124,37 @@ System.out.println("==========================================\n");
         System.out.println(header);
         System.out.println(divider);
 
-        for (int i = 0; i < n; i++) {
-            PCB p = processes.get(i);
+        for (PCB p : processes) {
+            int id = p.getProcessId();
             System.out.printf(
                     "%-12d %-12d %-12d %-18d %-14d %-16d%n",
-                    p.getProcessId(),
+                    id,
                     p.getBurstTime(),
-                    startTime[i],
-                    terminationTime[i],
-                    waitingTime[i],
-                    turnaroundTime[i]);
+                    startTimeMap.get(id),
+                    terminationTimeMap.get(id),
+                    waitingTimeMap.get(id),
+                    turnaroundTimeMap.get(id));
         }
 
         System.out.println(divider);
         System.out.println();
     }
 
-    private void printAverages(int n, int[] waitingTime, int[] turnaroundTime) {
+    private void printAverages() {
         double avgWaiting = 0;
         double avgTurnaround = 0;
 
-        for (int i = 0; i < n; i++) {
-            avgWaiting += waitingTime[i];
-            avgTurnaround += turnaroundTime[i];
+        for (PCB p : processes) {
+            avgWaiting += waitingTimeMap.get(p.getProcessId());
+            avgTurnaround += turnaroundTimeMap.get(p.getProcessId());
         }
 
-        avgWaiting /= n;
-        avgTurnaround /= n;
+        avgWaiting /= processes.size();
+        avgTurnaround /= processes.size();
 
         System.out.printf("Average Waiting Time    : %.2f ms%n", avgWaiting);
         System.out.printf("Average Turnaround Time : %.2f ms%n", avgTurnaround);
         System.out.println();
     }
 
-    // ── Standalone test (hardcoded processes) ────────────────────────────────
-    public static void main(String[] args) {
-
-        // Mirrors the sample from job.txt:
-        // ID : Burst : Priority ; Memory
-        // 1 : 25 : 4 ; 500
-        // 2 : 13 : 3 ; 700
-        // 3 : 20 : 3 ; 100
-        // 4 : 18 : 2 ; 200
-
-        List<PCB> readyQueue = new ArrayList<>();
-        readyQueue.add(new PCB(1, 25, 4, 500));
-        readyQueue.add(new PCB(2, 13, 3, 700));
-        readyQueue.add(new PCB(3, 20, 3, 100));
-        readyQueue.add(new PCB(4, 18, 2, 200));
-
-        SJFScheduler sjf = new SJFScheduler(readyQueue);
-        sjf.run();
-    }
 }

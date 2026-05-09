@@ -16,8 +16,7 @@ public class Main {
         MemoryManager memoryManagerRunnable = new MemoryManager(jobQueue, readyQueue);
 
         Thread fileReader = new Thread(
-                new FileReaderThread("src/proj/job.txt", jobQueue, memoryManagerRunnable)
-        );
+                new FileReaderThread("src/proj/job.txt", jobQueue, memoryManagerRunnable));
 
         Thread memoryManager = new Thread(memoryManagerRunnable);
 
@@ -26,7 +25,6 @@ public class Main {
 
         try {
             fileReader.join();
-            memoryManager.join();
         } catch (InterruptedException e) {
             System.out.println("Thread interrupted.");
         }
@@ -50,21 +48,17 @@ public class Main {
 
         switch (choice) {
             case 1:
-                SJFScheduler sjf = new SJFScheduler(processList);
+                SJFScheduler sjf = new SJFScheduler(readyQueue, memoryManagerRunnable);
                 sjf.run();
-                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
 
             case 2:
-                RoundRobinScheduler rr = new RoundRobinScheduler(processList);
+                RoundRobinScheduler rr = new RoundRobinScheduler(readyQueue, memoryManagerRunnable);
                 rr.run();
-                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
-
             case 3:
-                PriorityScheduler ps = new PriorityScheduler(processList);
+                PriorityScheduler ps = new PriorityScheduler(readyQueue, memoryManagerRunnable);
                 ps.run();
-                memoryManagerRunnable.freeMemoryAll(processList);
                 break;
 
             default:
