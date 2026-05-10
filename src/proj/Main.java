@@ -23,7 +23,6 @@ public class Main {
 
         try {
             fileReader.join();
-            memoryManager.join();
         } catch (InterruptedException e) {
             System.out.println("Thread interrupted.");
         }
@@ -62,6 +61,14 @@ public class Main {
             default:
                 System.out.println("Invalid choice. Please enter 1, 2, or 3.");
                 break;
+        }
+
+        memoryManagerRunnable.setSchedulingDone();
+
+        try {
+            memoryManager.join();
+        } catch (InterruptedException e) {
+            System.out.println("Thread interrupted.");
         }
 
         scanner.close();

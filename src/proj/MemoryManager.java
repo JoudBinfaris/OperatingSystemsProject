@@ -12,7 +12,8 @@ public class MemoryManager implements Runnable {
     private Queue<PCB> readyQueue;
     private List<PCB> rejectedQueue = new ArrayList<>();
     private int usedMemory = 0;
-    private boolean fileReaderDone = false;
+    private boolean fileReaderDone  = false;
+    private boolean schedulingDone  = false; // ✅ new flag
 
     public MemoryManager(Queue<PCB> jobQueue, Queue<PCB> readyQueue) {
         this.jobQueue = jobQueue;
@@ -26,11 +27,20 @@ public class MemoryManager implements Runnable {
         }
     }
 
+    // ✅ called by Main after scheduler finishes
+    public void setSchedulingDone() {
+        synchronized (this) {
+            schedulingDone = true;
+            this.notifyAll();
+        }
+    }
+
     @Override
     public void run() {
 
         System.out.println("Thread 2 started: Memory Manager is running...\n");
 
+        // ── Phase 1: initial job queue loading ───────────────────────────────
         while (true) {
 
             PCB process = null;
@@ -68,13 +78,26 @@ public class MemoryManager implements Runnable {
                         + " | Memory Used: " + usedMemory + "/" + MAX_MEMORY + " MB");
 
             } else {
-                System.out.println("Rejected: P" + process.getProcessId()
+                System.out.println("Waiting: P" + process.getProcessId()
                         + " | Needs: " + process.getMemoryRequired()
                         + " MB | Available: " + (MAX_MEMORY - usedMemory) + " MB");
                 rejectedQueue.add(process);
             }
         }
 
+        // ── Phase 2: stay alive until scheduling finishes ────────────────────
+        synchronized (this) {
+            while (!schedulingDone) {
+                try {
+                    this.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+
+        System.out.println("\nThread 2 finished.");
     }
 
     public void freeMemory(PCB process) {
