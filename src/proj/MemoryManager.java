@@ -13,7 +13,7 @@ public class MemoryManager implements Runnable {
     private List<PCB> rejectedQueue = new ArrayList<>();
     private int usedMemory = 0;
     private boolean fileReaderDone = false;
-    private boolean schedulingDone = false; // ✅ new flag
+    private boolean schedulingDone = false; 
 
     public MemoryManager(Queue<PCB> jobQueue, Queue<PCB> readyQueue) {
         this.jobQueue = jobQueue;
@@ -27,7 +27,7 @@ public class MemoryManager implements Runnable {
         }
     }
 
-    // ✅ called by Main after scheduler finishes
+    
     public void setSchedulingDone() {
         synchronized (this) {
             schedulingDone = true;
@@ -94,7 +94,7 @@ public class MemoryManager implements Runnable {
                     Thread.currentThread().interrupt();
                     return;
                 }
-                // when woken up, retry waiting processes independently
+                // when woken up retry waiting processes
                 retryRejected();
             }
         }
@@ -110,7 +110,7 @@ public class MemoryManager implements Runnable {
         System.out.println("Freed: P" + process.getProcessId()
                 + " | Memory Used: " + usedMemory + "/" + MAX_MEMORY + " MB");
 
-        // ✅ wake Thread 2 so it can independently retry waiting processes
+        
         synchronized (this) {
             this.notifyAll();
         }
