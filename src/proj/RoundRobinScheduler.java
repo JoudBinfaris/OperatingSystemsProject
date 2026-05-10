@@ -95,9 +95,8 @@ public class RoundRobinScheduler {
 
                     // Free this process's memory
                     memoryManager.freeMemory(p);
+                    try { Thread.sleep(10); } catch (InterruptedException e) {}
 
-                    // Try to admit any previously rejected processes
-                    memoryManager.retryRejected();
 
                     // Check if new processes were admitted to the live ready queue
                     for (PCB newP : liveReadyQueue) {

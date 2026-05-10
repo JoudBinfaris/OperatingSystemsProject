@@ -123,7 +123,8 @@ public class PriorityScheduler {
             // ── Memory management ─────────
             if (memoryManager != null) {
                 memoryManager.freeMemory(p);
-                memoryManager.retryRejected();
+                try { Thread.sleep(10); } catch (InterruptedException e) {}
+
                 
             }
         }
