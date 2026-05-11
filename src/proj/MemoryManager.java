@@ -10,7 +10,7 @@ public class MemoryManager implements Runnable {
 
     private Queue<PCB> jobQueue;
     private Queue<PCB> readyQueue;
-    private List<PCB> rejectedQueue = new ArrayList<>();
+    private List<PCB> watingQueue = new ArrayList<>();
     private int usedMemory = 0;
     private boolean fileReaderDone = false;
     private boolean schedulingDone = false; 
@@ -81,7 +81,7 @@ public class MemoryManager implements Runnable {
                 System.out.println("Waiting: P" + process.getProcessId()
                         + " | Needs: " + process.getMemoryRequired()
                         + " MB | Available: " + (MAX_MEMORY - usedMemory) + " MB");
-                rejectedQueue.add(process);
+                watingQueue.add(process);
             }
         }
 
@@ -124,8 +124,8 @@ public class MemoryManager implements Runnable {
     }
 
     public void retryRejected() {
-        List<PCB> retry = new ArrayList<>(rejectedQueue);
-        rejectedQueue.clear();
+        List<PCB> retry = new ArrayList<>(watingQueue);
+        watingQueue.clear();
         for (PCB process : retry) {
             if (usedMemory + process.getMemoryRequired() <= MAX_MEMORY) {
                 usedMemory += process.getMemoryRequired();
@@ -136,7 +136,7 @@ public class MemoryManager implements Runnable {
                 System.out.println("Admitted: P" + process.getProcessId()
                         + " | Memory Used: " + usedMemory + "/" + MAX_MEMORY + " MB");
             } else {
-                rejectedQueue.add(process); // still can't fit, keep waiting
+                watingQueue.add(process); // still can't fit, keep waiting
             }
         }
     }
